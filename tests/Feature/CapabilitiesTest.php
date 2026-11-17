@@ -15,11 +15,11 @@ class CapabilitiesTest extends TestCase
         $this->signed('GET', '/central-api/v1/health')
             ->assertOk()
             ->assertExactJson([
-                'version' => '2.0.0',
+                'version' => '2.1.0',
                 'product' => 'demo',
                 'capabilities' => [
                     'payment_owner', 'subscriptions', 'users_search', 'user_detail', 'change_plan',
-                    'password_reset', 'suspend', 'metrics', 'invoices',
+                    'password_reset', 'suspend', 'metrics', 'invoices', 'payment_events',
                 ],
             ]);
     }
@@ -78,6 +78,7 @@ class CapabilitiesTest extends TestCase
             'suspend' => ['POST', '/central-api/v1/users/u_42/suspend', ['reason' => 'x']],
             'unsuspend' => ['POST', '/central-api/v1/users/u_42/unsuspend', ['reason' => 'x']],
             'invoices' => ['POST', '/central-api/v1/invoices', ['invoice_id' => 'i']],
+            'payment-events' => ['POST', '/central-api/v1/payment-events', ['id' => 'evt_1']],
         ];
     }
 

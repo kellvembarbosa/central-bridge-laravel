@@ -9,6 +9,7 @@ use Applu\CentralBridge\Contracts\ProvidesPaymentOwnership;
 use Applu\CentralBridge\Contracts\ProvidesSubscriptions;
 use Applu\CentralBridge\Contracts\ProvidesUsers;
 use Applu\CentralBridge\Contracts\ReceivesInvoices;
+use Applu\CentralBridge\Contracts\ReceivesPaymentEvents;
 use Applu\CentralBridge\Contracts\SendsPasswordResets;
 use Applu\CentralBridge\Contracts\SuspendsUsers;
 use Applu\CentralBridge\Support\HandlerRegistry;
@@ -24,6 +25,7 @@ enum Capability: string
     case Suspend = 'suspend';
     case Metrics = 'metrics';
     case Invoices = 'invoices';
+    case PaymentEvents = 'payment_events';
 
     /**
      * Contracts that must ALL have a handler for the capability to exist.
@@ -41,6 +43,7 @@ enum Capability: string
             self::Suspend => [SuspendsUsers::class],
             self::Metrics => [ProvidesMetrics::class],
             self::Invoices => [ProvidesInvoiceRequests::class, ReceivesInvoices::class],
+            self::PaymentEvents => [ReceivesPaymentEvents::class],
         };
     }
 

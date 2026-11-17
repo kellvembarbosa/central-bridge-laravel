@@ -9,6 +9,7 @@ use Applu\CentralBridge\Contracts\ProvidesPaymentOwnership;
 use Applu\CentralBridge\Contracts\ProvidesSubscriptions;
 use Applu\CentralBridge\Contracts\ProvidesUsers;
 use Applu\CentralBridge\Contracts\ReceivesInvoices;
+use Applu\CentralBridge\Contracts\ReceivesPaymentEvents;
 use Applu\CentralBridge\Contracts\SendsPasswordResets;
 use Applu\CentralBridge\Contracts\SuspendsUsers;
 use Applu\CentralBridge\Data\Actor;
@@ -17,6 +18,7 @@ use Applu\CentralBridge\Data\InvoiceRequest;
 use Applu\CentralBridge\Data\InvoiceTaker;
 use Applu\CentralBridge\Data\MetricsDay;
 use Applu\CentralBridge\Data\Page;
+use Applu\CentralBridge\Data\PaymentEvent;
 use Applu\CentralBridge\Data\PaymentOwner;
 use Applu\CentralBridge\Data\PlanChange;
 use Applu\CentralBridge\Data\SubscriptionRecord;
@@ -29,7 +31,7 @@ use RuntimeException;
 /**
  * Implements every contract and records what it received.
  */
-class FakeBridgeHandler implements ManagesUserPlans, ProvidesInvoiceRequests, ProvidesMetrics, ProvidesPaymentOwnership, ProvidesSubscriptions, ProvidesUsers, ReceivesInvoices, SendsPasswordResets, SuspendsUsers
+class FakeBridgeHandler implements ManagesUserPlans, ProvidesInvoiceRequests, ProvidesMetrics, ProvidesPaymentOwnership, ProvidesSubscriptions, ProvidesUsers, ReceivesInvoices, ReceivesPaymentEvents, SendsPasswordResets, SuspendsUsers
 {
     /** @var list<array{0: string, 1: array<mixed>}> */
     public array $calls = [];
@@ -134,6 +136,11 @@ class FakeBridgeHandler implements ManagesUserPlans, ProvidesInvoiceRequests, Pr
     public function receiveInvoice(InvoiceDelivery $delivery, Actor $actor): void
     {
         $this->record('receiveInvoice', [$delivery, $actor]);
+    }
+
+    public function paymentEvent(PaymentEvent $event, Actor $actor): void
+    {
+        $this->record('paymentEvent', [$event, $actor]);
     }
 
     /**

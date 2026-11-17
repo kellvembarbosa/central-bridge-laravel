@@ -3,7 +3,8 @@
 A **Bridge** é a API de administração, assinada com HMAC, que cada produto Laravel
 expõe para a Central. A Central nunca grava no banco do produto: ela pede, o
 produto decide. O pacote também traz o `CentralClient`, que o produto usa para
-chamar a **API de faturação** da Central (emitir, listar e cancelar NFS-e).
+chamar a **API de faturação** da Central (emitir, listar e cancelar NFS-e) e o
+**checkout da Central** (listar planos, criar e consultar pagamentos).
 
 O contrato completo está em `docs/central/bridge-contract.md` (repositório da
 Central). Este pacote é a implementação Laravel desse contrato e passa nos
@@ -30,7 +31,7 @@ e é instalado por repositório `vcs`. No `composer.json` do produto:
         }
     ],
     "require": {
-        "applu/central-bridge": "^2.0"
+        "applu/central-bridge": "^2.1"
     }
 }
 ```
@@ -118,6 +119,7 @@ apenas o que existe.
 | `suspend` | `SuspendsUsers::suspend($ref, $reason, Actor $actor)` / `unsuspend(...)` |
 | `metrics` | `ProvidesMetrics::metrics($from, $to): iterable<MetricsDay>` |
 | `invoices` | **as duas**: `ProvidesInvoiceRequests::invoiceRequest($provider, $paymentId): InvoiceRequest` e `ReceivesInvoices::receiveInvoice(InvoiceDelivery $delivery, Actor $actor): void` |
+| `payment_events` | `ReceivesPaymentEvents::paymentEvent(PaymentEvent $event, Actor $actor): void` |
 
 Registre as classes em `config/central-bridge.php`:
 
@@ -238,6 +240,50 @@ class CentralUsers implements ProvidesUsers, SuspendsUsers
 `receiveInvoice` precisa ser idempotente por `invoice_id`: a Central pode
 reenviar a mesma nota.
 
+### Avisos de pagamento (`payment_events`)
+
+Quando a Central vende os planos do produto (contrato §10), ela confirma o
+pagamento no gateway e chama `POST payment-events` com um `PaymentEvent`
+(`X-Idempotency-Key` = `event->id`). Reenvia até receber 2xx, então o handler
+precisa ser **idempotente por `$event->id`** e, para liberar, por
+`$event->payment->id`.
+
+| `$event->type` | O que fazer |
+|---|---|
+| `payment.paid` | liberar o acesso de `$event->payment->plan` (uma vez por `payment->id`) |
+| `payment.refunded` | estorno total ou chargeback: revogar |
+| `payment.expired` | a cobrança pendente venceu sem pagamento (nada a liberar) |
+| `subscription.renewed` | estender o acesso até `$event->subscription->currentPeriodEnd` |
+| `subscription.ended` | assinatura cancelada/expirada: não renovar mais |
+
+```php
+use Applu\CentralBridge\Contracts\ReceivesPaymentEvents;
+use Applu\CentralBridge\Data\Actor;
+use Applu\CentralBridge\Data\PaymentEvent;
+
+class CentralCheckout implements ReceivesPaymentEvents
+{
+    public function paymentEvent(PaymentEvent $event, Actor $actor): void
+    {
+        $user = User::findOrFail($event->payment->productUserRef);
+        $plan = $event->payment->plan;
+
+        match ($event->type) {
+            PaymentEvent::PAYMENT_PAID => Access::grantOnce($user, $event->payment->id, $plan->slug,
+                until: $plan->isLifetime() ? null : now()->add($plan->interval, $plan->intervalCount)),
+            PaymentEvent::PAYMENT_REFUNDED => Access::revoke($user, $event->payment->id),
+            PaymentEvent::SUBSCRIPTION_RENEWED => Access::extend($user, $plan->slug,
+                until: $event->subscription?->currentPeriodEnd),
+            PaymentEvent::SUBSCRIPTION_ENDED => Access::stopRenewing($user, $plan->slug),
+            default => null, // payment.expired
+        };
+    }
+}
+```
+
+O corpo é validado antes de chegar ao handler: tipo desconhecido ou campo
+faltando/de tipo errado responde 422 `validation_failed` e o handler não roda.
+
 ## 4. Rotas
 
 | Método | Rota (`/central-api/v1`) | Resposta 200 |
@@ -254,8 +300,9 @@ reenviar a mesma nota.
 | POST | `users/{ref}/suspend` | `{ok: true}` |
 | POST | `users/{ref}/unsuspend` | `{ok: true}` |
 | POST | `invoices` | `{ok: true}` |
+| POST | `payment-events` | `{ok: true}` |
 
-## 5. Cliente da API de faturação (`CentralClient`)
+## 5. Cliente da API da Central (`CentralClient`)
 
 O produto chama a Central com o **mesmo token** e a mesma assinatura, mais o
 cabeçalho `X-Central-Product`. Precisa de `CENTRAL_URL`, `CENTRAL_BRIDGE_TOKEN`
@@ -294,6 +341,40 @@ try {
 - O motivo do cancelamento deve ter de 15 a 255 caracteres.
 - Os métodos JSON devolvem o corpo decodificado como veio da Central.
 - O produto só enxerga as próprias notas.
+
+### Checkout da Central (planos e pagamentos)
+
+A Central cria a cobrança com as chaves de gateway **dela**; o produto só
+escolhe o plano pelo `slug` (o preço vem da Central).
+
+```php
+use Applu\CentralBridge\Data\NewPayment;
+
+$plans = $central->listPlans();              // list<Plan>, à venda e na ordem
+
+$payment = $central->createPayment(new NewPayment(
+    plan: 'mensal',
+    customerName: $user->name,
+    customerEmail: $user->email,
+    productUserRef: (string) $user->id,
+    method: 'pix',                           // ou 'card', 'boleto', null = padrão do gateway
+    tracking: ['utm_source' => 'google'],    // opcional
+), idempotencyKey: "checkout-{$user->id}-{$attempt}");
+
+$payment->pix?->copyPaste;                   // Pix copia e cola (só pendente)
+$payment->checkoutUrl;                       // página hospedada (só pendente)
+
+$payment = $central->getPayment($payment->id); // tela de retorno: consulta o status
+if ($payment->isPaid()) { /* liberar, idempotente por $payment->id */ }
+```
+
+- `createPayment` também aceita o corpo cru (`array`) do contrato.
+- Mesma chave + mesmo corpo devolve o mesmo pagamento; depois de
+  `gateway_error` use **outra** chave.
+- Resposta da Central fora do formato esperado vira `CentralApiException` com
+  `unexpected_response`.
+- Liberar pelo aviso (`payment_events`) ou pelo `getPayment` que devolver
+  `paid` é seguro desde que os dois sejam idempotentes por `payment->id`.
 
 ## 6. Testes do pacote
 

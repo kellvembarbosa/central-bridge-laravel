@@ -11,6 +11,7 @@ use Applu\CentralBridge\Contracts\ProvidesPaymentOwnership;
 use Applu\CentralBridge\Contracts\ProvidesSubscriptions;
 use Applu\CentralBridge\Contracts\ProvidesUsers;
 use Applu\CentralBridge\Contracts\ReceivesInvoices;
+use Applu\CentralBridge\Contracts\ReceivesPaymentEvents;
 use Applu\CentralBridge\Contracts\SendsPasswordResets;
 use Applu\CentralBridge\Contracts\SuspendsUsers;
 use Applu\CentralBridge\Headers;
@@ -36,6 +37,7 @@ abstract class TestCase extends Orchestra
         ProvidesMetrics::class,
         ProvidesInvoiceRequests::class,
         ReceivesInvoices::class,
+        ReceivesPaymentEvents::class,
     ];
 
     protected function getPackageProviders($app): array

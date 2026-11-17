@@ -6,6 +6,7 @@ use Applu\CentralBridge\Http\Controllers\HealthController;
 use Applu\CentralBridge\Http\Controllers\InvoiceController;
 use Applu\CentralBridge\Http\Controllers\MetricsController;
 use Applu\CentralBridge\Http\Controllers\PaymentController;
+use Applu\CentralBridge\Http\Controllers\PaymentEventController;
 use Applu\CentralBridge\Http\Controllers\SubscriptionController;
 use Applu\CentralBridge\Http\Controllers\UserController;
 use Applu\CentralBridge\Http\Middleware\EnforceIdempotency;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 
 final class CentralBridge
 {
-    public const VERSION = '2.0.0';
+    public const VERSION = '2.1.0';
 
     public const PER_PAGE = 25;
 
@@ -59,6 +60,7 @@ final class CentralBridge
                     Route::post('users/{ref}/suspend', [UserController::class, 'suspend'])->name('users.suspend');
                     Route::post('users/{ref}/unsuspend', [UserController::class, 'unsuspend'])->name('users.unsuspend');
                     Route::post('invoices', InvoiceController::class)->name('invoices');
+                    Route::post('payment-events', PaymentEventController::class)->name('payment-events');
                 });
             });
     }

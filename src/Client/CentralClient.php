@@ -2,22 +2,32 @@
 
 namespace Applu\CentralBridge\Client;
 
+use Applu\CentralBridge\Data\NewPayment;
+use Applu\CentralBridge\Data\PaymentRecord;
+use Applu\CentralBridge\Data\Plan;
+use Applu\CentralBridge\Exceptions\BridgeException;
 use Applu\CentralBridge\Exceptions\CentralApiException;
 use Applu\CentralBridge\Headers;
 use Applu\CentralBridge\Signature;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
+use Closure;
 use Illuminate\Support\Facades\Http;
 use LogicException;
 
 /**
- * Client for the Central invoicing API (contract §9). Same token and HMAC
- * scheme as the Bridge, plus X-Central-Product. Writes need an idempotency key.
+ * Client for the Central API: invoicing (contract §9) and checkout (§10).
+ * Same token and HMAC scheme as the Bridge, plus X-Central-Product. Writes
+ * need an idempotency key.
  */
 class CentralClient
 {
     private const INVOICES_PATH = '/api/v1/invoices';
+
+    private const PLANS_PATH = '/api/v1/plans';
+
+    private const PAYMENTS_PATH = '/api/v1/payments';
 
     public function __construct(
         private readonly string $baseUrl,
@@ -91,6 +101,70 @@ class CentralClient
     public function cancelInvoice(string|int $id, string $reason, string $idempotencyKey): array
     {
         return $this->send('POST', $this->invoicePath($id, '/cancel'), ['reason' => $reason], $idempotencyKey)->json() ?? [];
+    }
+
+    /**
+     * Plans on sale, in display order (GET /api/v1/plans).
+     *
+     * @return list<Plan>
+     */
+    public function listPlans(): array
+    {
+        $response = $this->send('GET', self::PLANS_PATH);
+        $data = $response->json('data');
+
+        return $this->parsed($response, fn () => array_map(
+            fn ($plan) => Plan::fromArray(is_array($plan) ? $plan : []),
+            is_array($data) && array_is_list($data) ? $data : [],
+        ));
+    }
+
+    /**
+     * The Central creates the charge with its own gateway keys. Same key +
+     * same input returns the same payment; use a new key after a failure.
+     *
+     * @param  NewPayment|array<string, mixed>  $payment  NewPayment or the raw wire body
+     */
+    public function createPayment(NewPayment|array $payment, string $idempotencyKey): PaymentRecord
+    {
+        $body = $payment instanceof NewPayment ? $payment->toArray() : $payment;
+        $response = $this->send('POST', self::PAYMENTS_PATH, $body, $idempotencyKey);
+
+        return $this->parsed($response, fn () => PaymentRecord::fromArray($response->json('data')));
+    }
+
+    /**
+     * Current status (a pending payment is re-checked at the gateway first).
+     */
+    public function getPayment(string $id): PaymentRecord
+    {
+        $response = $this->send('GET', self::PAYMENTS_PATH.'/'.rawurlencode($id));
+
+        return $this->parsed($response, fn () => PaymentRecord::fromArray($response->json('data')));
+    }
+
+    /**
+     * A malformed Central answer surfaces as CentralApiException, like any
+     * other client failure.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $parse
+     * @return T
+     */
+    private function parsed(Response $response, Closure $parse): mixed
+    {
+        try {
+            return $parse();
+        } catch (BridgeException $e) {
+            throw new CentralApiException(
+                CentralApiException::UNEXPECTED_RESPONSE,
+                'A Central respondeu em um formato inesperado. '.$e->getMessage(),
+                $response->status(),
+                is_array($response->json()) ? $response->json() : null,
+                $e,
+            );
+        }
     }
 
     private function invoicePath(string|int $id, string $suffix = ''): string
