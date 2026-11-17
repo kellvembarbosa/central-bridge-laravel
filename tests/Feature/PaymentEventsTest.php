@@ -38,20 +38,6 @@ class PaymentEventsTest extends TestCase
         $event = $this->fake()->callsTo('paymentEvent')[0][0];
         $this->assertSame(PaymentEvent::SUBSCRIPTION_RENEWED, $event->type);
         $this->assertSame('2027-01-17T12:00:00.000+00:00', $event->subscription->currentPeriodEnd);
-        $this->assertSame('2027-01-17T12:00:00.000+00:00', $event->payment->accessUntil);
-    }
-
-    public function test_prepaid_payment_carries_access_until_and_subscription(): void
-    {
-        $wire = self::vectors('payment_event.json')['prepaid_wire'];
-
-        $this->signedWrite(self::URI, $wire, $wire['id'])->assertOk();
-
-        $event = $this->fake()->callsTo('paymentEvent')[0][0];
-        $this->assertSame(PaymentEvent::PAYMENT_PAID, $event->type);
-        $this->assertFalse($event->payment->plan->recurring);
-        $this->assertSame('2026-12-17T12:01:00.000+00:00', $event->payment->accessUntil);
-        $this->assertSame($event->payment->accessUntil, $event->subscription->currentPeriodEnd);
     }
 
     public function test_same_event_replays_without_calling_handler_again(): void

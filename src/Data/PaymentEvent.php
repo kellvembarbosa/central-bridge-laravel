@@ -9,19 +9,11 @@ use Applu\CentralBridge\Support\StrictWire;
  * arrive more than once: handle it idempotently by `id` (and, to grant,
  * by `payment->id`).
  *
- * - `payment.paid`: set the access of `payment->productUserRef` to
- *   `payment->plan->slug` until `payment->accessUntil` (null = forever), once
- *   per payment id.
+ * - `payment.paid`: grant access for `payment->plan` (once per payment id).
  * - `payment.refunded`: full refund or chargeback, revoke.
  * - `payment.expired`: the pending charge expired unpaid.
- * - `subscription.renewed`: same as `payment.paid`, access now runs until the
- *   new `payment->accessUntil`.
- * - `subscription.ended`: the gateway will not charge again; access still
- *   runs until `payment->accessUntil`.
- *
- * `subscription` is sent for every paid plan that has a period (recurring or
- * one-off prepaid) and is null only for lifetime plans and never-paid
- * charges. `subscription->currentPeriodEnd` equals `payment->accessUntil`.
+ * - `subscription.renewed`: extend access until `subscription->currentPeriodEnd`.
+ * - `subscription.ended`: canceled/expired, do not renew anymore.
  */
 final readonly class PaymentEvent
 {

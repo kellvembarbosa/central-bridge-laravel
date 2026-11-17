@@ -15,7 +15,7 @@ class CapabilitiesTest extends TestCase
         $this->signed('GET', '/central-api/v1/health')
             ->assertOk()
             ->assertExactJson([
-                'version' => '2.2.0',
+                'version' => '2.1.0',
                 'product' => 'demo',
                 'capabilities' => [
                     'payment_owner', 'subscriptions', 'users_search', 'user_detail', 'change_plan',

@@ -31,7 +31,7 @@ e é instalado por repositório `vcs`. No `composer.json` do produto:
         }
     ],
     "require": {
-        "applu/central-bridge": "^2.2"
+        "applu/central-bridge": "^2.1"
     }
 }
 ```
@@ -250,18 +250,11 @@ precisa ser **idempotente por `$event->id`** e, para liberar, por
 
 | `$event->type` | O que fazer |
 |---|---|
-| `payment.paid` | dar ao usuário `$event->payment->productUserRef` acesso a `$event->payment->plan->slug` até `$event->payment->accessUntil` (`null` = para sempre), uma vez por `payment->id` |
+| `payment.paid` | liberar o acesso de `$event->payment->plan` (uma vez por `payment->id`) |
 | `payment.refunded` | estorno total ou chargeback: revogar |
 | `payment.expired` | a cobrança pendente venceu sem pagamento (nada a liberar) |
-| `subscription.renewed` | igual a `payment.paid`: o acesso passa a valer até o novo `$event->payment->accessUntil` |
-| `subscription.ended` | o gateway não vai cobrar de novo; o acesso segue até `$event->payment->accessUntil` |
-
-`$event->payment->accessUntil` é até quando o pagamento (e suas renovações) dá
-acesso; `null` = vitalício (ou ainda não pago). Quem calcula é a Central: o
-produto nunca faz conta de data. `$event->subscription` (`status`,
-`currentPeriodEnd`) vem em todo plano pago que tem período (recorrente ou
-pré-pago avulso) e é `null` só em plano vitalício e em cobrança nunca paga;
-`subscription->currentPeriodEnd` é igual a `payment->accessUntil`.
+| `subscription.renewed` | estender o acesso até `$event->subscription->currentPeriodEnd` |
+| `subscription.ended` | assinatura cancelada/expirada: não renovar mais |
 
 ```php
 use Applu\CentralBridge\Contracts\ReceivesPaymentEvents;
@@ -272,15 +265,17 @@ class CentralCheckout implements ReceivesPaymentEvents
 {
     public function paymentEvent(PaymentEvent $event, Actor $actor): void
     {
-        $payment = $event->payment;
-        $user = User::findOrFail($payment->productUserRef);
+        $user = User::findOrFail($event->payment->productUserRef);
+        $plan = $event->payment->plan;
 
         match ($event->type) {
-            // acesso ao plano até accessUntil (null = para sempre); sem conta de data
-            PaymentEvent::PAYMENT_PAID,
-            PaymentEvent::SUBSCRIPTION_RENEWED => Access::set($user, $payment->plan->slug, until: $payment->accessUntil),
-            PaymentEvent::PAYMENT_REFUNDED => Access::revoke($user, $payment->id),
-            default => null, // subscription.ended (acesso segue até accessUntil), payment.expired
+            PaymentEvent::PAYMENT_PAID => Access::grantOnce($user, $event->payment->id, $plan->slug,
+                until: $plan->isLifetime() ? null : now()->add($plan->interval, $plan->intervalCount)),
+            PaymentEvent::PAYMENT_REFUNDED => Access::revoke($user, $event->payment->id),
+            PaymentEvent::SUBSCRIPTION_RENEWED => Access::extend($user, $plan->slug,
+                until: $event->subscription?->currentPeriodEnd),
+            PaymentEvent::SUBSCRIPTION_ENDED => Access::stopRenewing($user, $plan->slug),
+            default => null, // payment.expired
         };
     }
 }

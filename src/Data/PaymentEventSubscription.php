@@ -5,10 +5,7 @@ namespace Applu\CentralBridge\Data;
 use Applu\CentralBridge\Support\StrictWire;
 
 /**
- * Period state of the payment's plan, sent with every paid plan that has a
- * period (recurring or one-off prepaid); null on the event only for lifetime
- * plans and never-paid charges. `currentPeriodEnd` equals
- * `payment->accessUntil`.
+ * Subscription state carried by `subscription.*` events (recurring plans).
  */
 final readonly class PaymentEventSubscription
 {

@@ -36,7 +36,7 @@ class DataObjectsTest extends TestCase
                 'created_at' => null, 'last_seen_at' => null,
             ],
             PlanChange::class => ['plan' => 'pro', 'until' => '2026-12-31', 'reason' => null],
-            Health::class => ['version' => '2.2.0', 'product' => 'demo', 'capabilities' => ['metrics']],
+            Health::class => ['version' => '2.1.0', 'product' => 'demo', 'capabilities' => ['metrics']],
             Actor::class => ['email' => 'a@b.c', 'request_id' => 'rq'],
             InvoiceDelivery::class => [
                 'invoice_id' => 'i', 'request_ref' => null, 'provider' => 'stripe', 'payment_id' => 'p',
