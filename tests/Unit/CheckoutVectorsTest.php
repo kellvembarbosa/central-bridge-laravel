@@ -38,7 +38,7 @@ class CheckoutVectorsTest extends TestCase
     {
         $v = self::vectors('payment_event.json');
 
-        foreach (['event', 'renewal'] as $name) {
+        foreach (['event', 'renewal', 'prepaid'] as $name) {
             $event = PaymentEvent::fromArray($v[$name.'_wire']);
 
             $this->assertSame($v[$name.'_parsed'], self::camel($event), $name);
@@ -61,7 +61,7 @@ class CheckoutVectorsTest extends TestCase
     public function test_defaults_for_optional_fields(): void
     {
         $wire = self::vectors('payment_event.json')['payment_wire'];
-        unset($wire['refunded_cents'], $wire['tracking'], $wire['pix']);
+        unset($wire['refunded_cents'], $wire['tracking'], $wire['pix'], $wire['access_until']);
         $wire['method'] = null;
 
         $payment = PaymentRecord::fromArray($wire);
@@ -70,7 +70,21 @@ class CheckoutVectorsTest extends TestCase
         $this->assertSame('other', $payment->method);
         $this->assertSame([], $payment->tracking);
         $this->assertNull($payment->pix);
+        $this->assertNull($payment->accessUntil); // older Central omits it
         $this->assertSame('{}', json_encode($payment->toArray()['tracking']));
+    }
+
+    public function test_access_until_must_be_a_string_or_null(): void
+    {
+        $wire = self::vectors('payment_event.json')['payment_wire'];
+        $wire['access_until'] = 123;
+
+        try {
+            PaymentRecord::fromArray($wire);
+            $this->fail('accepted a non-string access_until');
+        } catch (BridgeException $e) {
+            $this->assertSame(ErrorCode::ValidationFailed, $e->errorCode);
+        }
     }
 
     public function test_new_payment_wire(): void

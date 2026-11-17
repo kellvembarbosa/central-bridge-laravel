@@ -29,6 +29,7 @@ final readonly class PaymentRecord
      * @param  PaymentPix|null  $pix  only while pending
      * @param  string|null  $checkoutUrl  hosted payment page, only while pending
      * @param  array<string, string>  $tracking
+     * @param  string|null  $accessUntil  until when this payment (and its renewals) grants access; null = lifetime or not paid yet. The Central computes it: the product never does date math.
      */
     public function __construct(
         public string $id,
@@ -43,6 +44,7 @@ final readonly class PaymentRecord
         public ?PaymentPix $pix,
         public ?string $checkoutUrl,
         public array $tracking,
+        public ?string $accessUntil,
         public string $createdAt,
         public ?string $paidAt = null,
         public ?string $refundedAt = null,
@@ -85,6 +87,7 @@ final readonly class PaymentRecord
             $pix === null ? null : PaymentPix::fromArray($pix, $p.'pix.'),
             StrictWire::stringOrNull($o, 'checkout_url', $p),
             StrictWire::stringMap($o['tracking'] ?? null, $p.'tracking'),
+            StrictWire::stringOrNull($o, 'access_until', $p),
             StrictWire::string($o, 'created_at', $p),
             StrictWire::stringOrNull($o, 'paid_at', $p),
             StrictWire::stringOrNull($o, 'refunded_at', $p),
@@ -107,6 +110,7 @@ final readonly class PaymentRecord
             'pix' => $this->pix?->toArray(),
             'checkout_url' => $this->checkoutUrl,
             'tracking' => Wire::map($this->tracking),
+            'access_until' => $this->accessUntil,
             'created_at' => $this->createdAt,
             'paid_at' => $this->paidAt,
             'refunded_at' => $this->refundedAt,
